@@ -1,0 +1,25 @@
+[package]
+name = "zahnrad"
+version = "0.9.0"
+edition = "2021"
+license = "MIT"
+description = "Evolventen-Zahnraeder fuer SolidCraft (craft:plugin@0.1.0): Stirnrad, schraeg, Pfeil, Hohlrad, Zahnstange, Schnecke, Schneckenrad"
+
+# Eigenstaendig, nicht Teil des SolidCraft-Workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wit-bindgen = "0.36"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
