@@ -391,7 +391,7 @@ pub fn entries() -> Vec<Entry> {
             _ => {}
         }
     }
-    all.insert(0, Entry { name: "gear", menu: "Zahnrad-Generator", ribbon: "", fields });
+    all.insert(0, Entry { name: "gear", menu: "Zahnrad-Generator", ribbon: "Zahnrad", fields });
     all
 }
 
@@ -411,6 +411,9 @@ const TYPE_CHOICES: &[(&str, &str)] = &[
 /// JSON-Schema eines Eintrags (daraus baut SolidCraft den Dialog).
 pub fn schema(e: &Entry) -> Value {
     let mut props = Map::new();
+    // Gemeinsamer Eintrag: je Feld die Arten, in denen es vorkommt (-> Sichtbarkeit) und die Vorgabe je Art.
+    let subs: Vec<Entry> = if e.name == "gear" { entries().into_iter().filter(|x| x.name != "gear").collect() } else { Vec::new() };
+    let tkey = e.fields.iter().position(|x| x.key == "type").map(|i| format!("{:02}_type", i + 1));
     for (i, fl) in e.fields.iter().enumerate() {
         let mut p = Map::new();
         let mut title = if fl.unit.is_empty() { fl.title.to_string() } else { format!("{} [{}]", fl.title, fl.unit) };
@@ -442,6 +445,25 @@ pub fn schema(e: &Entry) -> Value {
             }
         }
         p.insert("default".into(), compact(&fl.def));
+        if let (Some(tk), true) = (&tkey, fl.key != "type") {
+            let mut present: Vec<(&str, &Value)> = Vec::new();
+            for (disp, target) in TYPES {
+                if let Some(sf) = subs.iter().find(|x| x.name == *target).and_then(|x| x.fields.iter().find(|y| y.key == fl.key)) {
+                    present.push((disp, &sf.def));
+                }
+            }
+            if present.len() < TYPES.len() && !present.is_empty() {
+                let names: Vec<&str> = present.iter().map(|x| x.0).collect();
+                p.insert("x-solidcraft-visible-when".into(), json!({ "field": tk, "in": names }));
+            }
+            {
+                let differs = present.iter().any(|x| x.1 != present[0].1);
+                if differs && !matches!(fl.def, Value::Bool(_)) {
+                    let rules: Vec<Value> = present.iter().map(|(d, v)| json!({ "when": { "field": tk, "eq": d }, "value": compact(v) })).collect();
+                    p.insert("x-solidcraft-defaults".into(), Value::Array(rules));
+                }
+            }
+        }
         props.insert(format!("{:02}_{}", i + 1, fl.key), Value::Object(p));
     }
     json!({ "type": "object", "properties": props, "additionalProperties": false })

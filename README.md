@@ -1,6 +1,6 @@
 # Zahnrad-Generator – gear generator plugin for SolidCraft
 
-**English:** An open-source (MIT) plugin for [SolidCraft](https://github.com/tangency-labs/solidcraft) that generates involute gears and gear pairs as ordinary editable solids. Written in Rust, built as a WebAssembly component (`craft:plugin`, `commands@0.1`). Current version: **0.9.0**. The user interface is German.
+**English:** An open-source (MIT) plugin for [SolidCraft](https://github.com/tangency-labs/solidcraft) that generates involute gears and gear pairs as ordinary editable solids. Written in Rust, built as a WebAssembly component (`craft:plugin`, `commands@0.1`). Current version: **1.0.0**. The user interface is German.
 
 - Single gears: spur (straight, helical, herringbone), internal, rack, worm, worm wheel
 - Pairs with correct centre distance and tooth phase: spur pair, pinion + internal gear, pinion + rack, worm + wheel; the ratio *i* is shown in the body names
