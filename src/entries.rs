@@ -954,37 +954,53 @@ fn crown_flank(m: f64, z1: usize, zc: usize, al: f64, ha: f64, zp: f64, rho: f64
         }
         Some((qx, qy, hh + b))
     };
-    let mut out: Vec<(f64, f64)> = Vec::new();
-    let n = 48;
-    for i in 0..=n {
-        let q = ra - (ra - rb) * i as f64 / n as f64;
-        let mut best: Option<(f64, f64, f64)> = None; // (|phi|, z, y)
-        let steps = 1000;
+    // Wurzeln von Qx(phi) = rho im Fenster [lo, hi]: (phi, z, y) im Eingriffsbereich
+    let roots = |q: f64, lo: f64, hi: f64, steps: usize| -> Vec<(f64, f64, f64)> {
+        let mut res = Vec::new();
         let mut prev: Option<(f64, f64)> = None;
         for j in 0..=steps {
-            let phi = -1.0 + 2.0 * j as f64 / steps as f64;
+            let phi = lo + (hi - lo) * j as f64 / steps as f64;
             let cur = eval(q, phi).map(|p| (phi, p.0 - rho));
             if let (Some((p0, f0)), Some((p1, f1))) = (prev, cur) {
-                if f0 * f1 <= 0.0 && (p1 - p0).abs() < 0.01 {
-                    let (mut lo, mut hi) = (p0, p1);
-                    for _ in 0..50 {
-                        let mid = 0.5 * (lo + hi);
-                        match (eval(q, lo), eval(q, mid)) {
-                            (Some(a), Some(b)) if (a.0 - rho) * (b.0 - rho) <= 0.0 => hi = mid,
-                            _ => lo = mid,
+                if f0 * f1 <= 0.0 {
+                    let (mut a, mut fa, mut bb) = (p0, f0, p1);
+                    for _ in 0..30 {
+                        let mid = 0.5 * (a + bb);
+                        match eval(q, mid) {
+                            Some(pm) if fa * (pm.0 - rho) <= 0.0 => bb = mid,
+                            Some(pm) => {
+                                a = mid;
+                                fa = pm.0 - rho;
+                            }
+                            None => break,
                         }
                     }
-                    let ph = 0.5 * (lo + hi);
+                    let ph = 0.5 * (a + bb);
                     if let Some(p) = eval(q, ph) {
-                        if (p.0 - rho).abs() < 1e-6 && p.2 > zp - 3.0 && p.2 < zp + 4.0 && best.map_or(true, |b| ph.abs() < b.0) {
-                            best = Some((ph.abs(), p.2, p.1));
+                        if (p.0 - rho).abs() < 1e-6 && p.2 > zp - 3.0 && p.2 < zp + 4.0 {
+                            res.push((ph, p.2, p.1));
                         }
                     }
                 }
             }
             prev = cur;
         }
-        if let Some((_, z, y)) = best {
+        res
+    };
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    let n = 18;
+    let mut last: Option<f64> = None;
+    for i in 0..=n {
+        let q = ra - (ra - rb) * i as f64 / n as f64;
+        // erst im Fenster um die vorige Loesung suchen (Fortsetzung), sonst im ganzen Bereich
+        let mut found = last.map(|l| roots(q, l - 0.06, l + 0.06, 12)).unwrap_or_default();
+        if found.is_empty() {
+            found = roots(q, -0.8, 0.8, 120);
+        }
+        let ref_phi = last.unwrap_or(0.0);
+        let best = found.into_iter().min_by(|a, b| (a.0 - ref_phi).abs().partial_cmp(&(b.0 - ref_phi).abs()).unwrap());
+        if let Some((ph, z, y)) = best {
+            last = Some(ph);
             if out.last().map_or(true, |l| z > l.0 + 1e-6) {
                 out.push((z, y));
             } else if out.len() > 3 {

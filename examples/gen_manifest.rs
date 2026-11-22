@@ -17,7 +17,7 @@ fn main() {
     let manifest = json!({
         "id": "zahnrad",
         "name": "Zahnrad-Generator",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "description": "Evolventen-Zahnräder: Einzelräder und Getriebepaare: Stirnrad (gerade, schräg, Pfeil), Hohlrad, Zahnstange, Schnecke, Schneckenrad, Kegelrad (90°), Kronenrad.",
         "capabilities": ["commands@0.1"],
         "runtime": {
