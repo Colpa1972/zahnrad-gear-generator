@@ -1408,7 +1408,9 @@ fn gearbox(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     }
     let (al, gap) = (p.num("alpha")?, p.num("gap")?);
     let (ha, clr, bore) = (p.num("ha")?, p.num("c")?, p.num("bore")?);
-    let name = format!("{} (i={})", p.text("name"), fmt_i(stages.iter().map(|s| s.z2 as f64 / s.z1 as f64).product()));
+    // Die Uebersetzung entsteht erst mit jedem Radpaar: Antriebsritzel ohne i, jedes Rad (und das Ritzel auf
+    // derselben Welle) traegt die bis dahin aufgelaufene Uebersetzung i = n_an / n_ab = Z2/Z1 · Z4/Z3 · …
+    let name = p.text("name");
     let herr = p.flag("herringbone");
     let hand0 = p.sign() > 0.0;
     // Lage der Wellen (X) und Ebenen (Z) vorab
@@ -1433,7 +1435,15 @@ fn gearbox(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
         // Steigungsrichtung wechselt von Stufe zu Stufe, damit die Welle nicht doppelt axial belastet wird
         let right1 = hand0 ^ (k % 2 == 1);
         let hand = |r: bool| if r { "rechts" } else { "links" };
-        let (n1, n2) = (format!("{name} Z{} Ritzel W{}", 2 * k + 1, k + 1), format!("{name} Z{} Rad W{}", 2 * k + 2, k + 2));
+        let cum_before: f64 = stages[..k].iter().map(|s| s.z2 as f64 / s.z1 as f64).product();
+        let cum_after = cum_before * s.z2 as f64 / s.z1 as f64;
+        let n1 = if k == 0 {
+            format!("{name} Z1 Ritzel W1 (Antrieb)")
+        } else {
+            format!("{name} Z{} Ritzel W{} (i={})", 2 * k + 1, k + 1, fmt_i(cum_before))
+        };
+        let last = k + 1 == stages.len();
+        let n2 = format!("{name} Z{} Rad W{} (i={}{})", 2 * k + 2, k + 2, fmt_i(cum_after), if last { ", Abtrieb" } else { "" });
         single(&mut c, "spur", gear_json(&n1, s.m, s.z1, al, s.beta, hand(right1), herr, ha, clr, s.w1, bore, 0.0))?;
         single(&mut c, "spur", gear_json(&n2, s.m, s.z2, al, s.beta, hand(!right1), herr, ha, clr, s.w2, bore, PI - PI / s.z2 as f64))?;
         if x[k] != 0.0 || zl != 0.0 {
@@ -1441,11 +1451,11 @@ fn gearbox(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
         }
         mv(&mut c, &n2, [x[k + 1], 0.0, zl])?;
         labels.push(json!({ "stufe": k + 1, format!("Z{}", 2 * k + 1): s.z1, format!("Z{}", 2 * k + 2): s.z2, "modul": s.m, "beta": s.beta,
-            "dicke": [s.w1, s.w2], "welle": [k + 1, k + 2], "x": x[k], "x2": x[k + 1], "ebene_z": zl, "i": s.z2 as f64 / s.z1 as f64 }));
+            "dicke": [s.w1, s.w2], "welle": [k + 1, k + 2], "x": x[k], "x2": x[k + 1], "ebene_z": zl, "i_stufe": s.z2 as f64 / s.z1 as f64, "i_bis_hier": cum_after }));
         last_cost = c.n - start;
     }
     let ratio: f64 = stages.iter().map(|s| s.z2 as f64 / s.z1 as f64).product();
-    let mut out = json!({ "stufen": stages.len(), "uebersetzung_gesamt": ratio, "gebaut": labels, "aufrufe": c.n });
+    let mut out = json!({ "stufen": stages.len(), "uebersetzung_gesamt": ratio, "i_erklaerung": "i = n_an / n_ab = Z2/Z1 · Z4/Z3 · … (i > 1: Untersetzung ins Langsame; Verhältnis der Teilkreise, nicht der Kopfkreise)", "gebaut": labels, "aufrufe": c.n });
     if let Some(n) = next_stage {
         out["weiter"] = json!(format!("Weitere Stufen: Lauf mit „Ab Stufe“ = {n} wiederholen (Aufruf-Limit von SolidCraft)."));
     }
