@@ -918,12 +918,17 @@ fn pair_bevel(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
 /// Zahnquerschnitt eines Kronenrads in der Ebene x = rho (Koordinaten y, z).
 fn crown_section(m: f64, zc: usize, al: f64, ha: f64, c: f64, base: f64, rho: f64) -> Result<Vec<P2>, Error> {
     // Zahndicke in der Teilebene: Teilung 2*pi*rho/z minus die (konstante) Zahndicke des Ritzels pi*m/2
-    let half_p = PI * rho / zc as f64 - PI * m / 4.0 - 0.03 * m; // 0,03 m Flankenspiel je Seite
+    let rr = m * zc as f64 / 2.0;
+    // Das Ritzel hat nur in der Mitte (rho = rr) das passende Profil; zu den Enden der Zahnbreite hin
+    // wird die Luecke etwas weiter (Flankenspiel je Seite).
+    let half_p = PI * rho / zc as f64 - PI * m / 4.0 - 0.03 * m - 0.06 * (rho - rr).abs();
     let (zr, zp) = (base, base + (ha + c) * m);
-    let zt = zp + ha * m;
+    // Zahnkopf etwas niedriger als das Ritzel-Fussspiel verlangt: die Ritzelzaehne beruehren die Kronenradspitzen sonst am Rand
+    let hk = 0.8 * ha * m;
+    let zt = zp + hk;
     let tr = half_p + (ha + c) * m * al.tan();
-    let tt = half_p - ha * m * al.tan();
-    if tt < 0.1 * m {
+    let tt = half_p - hk * al.tan();
+    if tt < 0.04 * m {
         return Err(bad("Kronenrad: Zahn am Kopf zu spitz (Breite zu groß oder Zähnezahl zu klein)."));
     }
     if 2.0 * tr >= 2.0 * PI * rho / zc as f64 - 0.05 * m || half_p <= 0.0 {
@@ -955,7 +960,7 @@ fn build_crown(h: &mut dyn Host, name: &str, m: f64, zc: usize, al: f64, ha: f64
     cmd(h, "solid.loft", json!({ "sections": [{ "sketch": s0 }, { "sketch": s1 }], "operation": "join", "targets": [name], "name": tn }))?;
     cmd(h, "solid.pattern.circular", json!({ "features": [tn], "axis": "Z", "count": zc, "name": format!("{name} Zahnkranz") }))?;
     bore(h, name, bore_d, 0.0, base)?;
-    Ok(json!({ "d": 2.0 * rr, "ri": ri, "ro": ro, "z_teilebene": base + (ha + c) * m, "z_kopf": base + (2.0 * ha + c) * m }))
+    Ok(json!({ "d": 2.0 * rr, "ri": ri, "ro": ro, "z_teilebene": base + (ha + c) * m, "z_kopf": base + (1.8 * ha + c) * m }))
 }
 
 /// Kronenrad (Planrad): Scheibe in z = 0 .. base, Zaehne nach oben, ein Zahn bei Winkel 0.
