@@ -425,4 +425,10 @@ fn crown_is_conjugate_to_pinion_and_limited_by_undercut_and_pointing() {
     assert!(run("pair-crown", json!({ "z": 15, "z2": 45, "m": 2, "b": 40 })).is_err());
     assert!(run("crown", json!({ "z": 45, "z2": 15, "b": 40 })).is_err());
     assert!(run("crown", json!({ "z": 45, "z2": 15 })).is_ok());
+    // Breite 0 = automatisch, unabhaengig vom Modul (kleines Modul darf nicht an einer festen Breite scheitern)
+    for m in [0.5, 1.0, 2.0, 3.0] {
+        let (_, o) = run("pair-crown", json!({ "z": 15, "z2": 45, "m": m })).unwrap();
+        let w = o["kronenrad"]["b"].as_f64().unwrap();
+        assert!(w > 0.5 * m && w < 6.0 * m, "m={m} b={w}");
+    }
 }

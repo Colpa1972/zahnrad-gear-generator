@@ -255,7 +255,7 @@ fn bevel_entries() -> Vec<Entry> {
                 alpha(),
                 ha(),
                 c(),
-                f("b", "Zahnbreite b (radial)", "mm", 6.0, Some(0.2), Some(500.0), ""),
+                f("b", "Zahnbreite b (radial)", "mm", 0.0, Some(0.0), Some(500.0), "0 = automatisch"),
                 f("base", "Scheibendicke", "mm", 6.0, Some(0.5), None, "unter dem Zahnfuß"),
                 f("bore", "Bohrung Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
             ],
@@ -289,7 +289,7 @@ fn bevel_entries() -> Vec<Entry> {
                 alpha(),
                 ha(),
                 c(),
-                f("b", "Zahnbreite b (radial)", "mm", 6.0, Some(0.2), Some(500.0), ""),
+                f("b", "Zahnbreite b (radial)", "mm", 0.0, Some(0.0), Some(500.0), "0 = automatisch"),
                 f("base", "Scheibendicke Kronenrad", "mm", 6.0, Some(0.5), None, "unter dem Zahnfuß"),
                 f("bore", "Bohrung Ritzel Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
                 f("bore2", "Bohrung Kronenrad Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
@@ -445,7 +445,7 @@ pub fn entries() -> Vec<Entry> {
         ("x", "Profilverschiebung x (nur Einzelrad)"),
         ("ha", "Kopfhöhenfaktor h*a"),
         ("c", "Kopfspiel c*"),
-        ("b", "Zahnbreite b [mm] (Schnecke: Länge; Kegelrad: Mantellinie; Kronenrad: radial, beginnt innen bei 1,04·R·cos α)"),
+        ("b", "Zahnbreite b [mm] (Schnecke: Länge; Kegelrad: Mantellinie; Kronenrad: radial, 0 = automatisch)"),
         ("bore", "Bohrung Ø [mm] (Ritzel / Welle / Schnecke)"),
         ("bore2", "Bohrung Gegenrad Ø [mm]"),
         ("dout", "Hohlrad: Außen-Ø [mm] (0 = automatisch)"),
@@ -1073,8 +1073,29 @@ fn crown_range(m: f64, zc: usize, al: f64, b: f64) -> (f64, f64) {
     (ri, ri + b)
 }
 
+/// Groesste Zahnbreite, bei der alle Schnitte noch herstellbar sind (None: schon innen nicht).
+fn crown_max_width(m: f64, zc: usize, z1: usize, al: f64, ha: f64, c: f64, base: f64) -> Option<f64> {
+    let rr = m * zc as f64 / 2.0;
+    let ri = 1.04 * rr * al.cos();
+    let step = m / 16.0;
+    let mut q = ri;
+    let mut rmax = None;
+    while q <= ri + 3.0 * rr && crown_section(m, z1, zc, al, ha, c, base, q).is_ok() {
+        rmax = Some(q);
+        q += step;
+    }
+    rmax.map(|q| q - ri).filter(|w| *w >= 0.2 * m)
+}
+
 fn build_crown(h: &mut dyn Host, name: &str, m: f64, zc: usize, z1: usize, al: f64, ha: f64, c: f64, b: f64, base: f64, bore_d: f64) -> Result<Value, Error> {
     let rr = m * zc as f64 / 2.0;
+    // b = 0: automatisch die Haelfte der groessten moeglichen Breite (Zahnspitzen aussen nicht zu schmal)
+    let b = if b > 0.0 {
+        b
+    } else {
+        let w = crown_max_width(m, zc, z1, al, ha, c, base).ok_or_else(|| bad(format!("Kronenrad mit Ritzel Z{z1} / Rad Z{zc} nicht sinnvoll herstellbar – ein Ritzel mit mehr Zähnen wählen (bei 20° etwa ab 15).")))?;
+        0.5 * w
+    };
     let (ri, ro) = crown_range(m, zc, al, b);
     if bore_d / 2.0 >= ri - 0.5 * m {
         return Err(bad("Bohrung zu groß für den Zahnkranz."));
@@ -1086,19 +1107,13 @@ fn build_crown(h: &mut dyn Host, name: &str, m: f64, zc: usize, z1: usize, al: f
         match crown_section(m, z1, zc, al, ha, c, base, rho) {
             Ok(s) => secs.push((rho, s)),
             Err(e) => {
-                // groesste noch moegliche Zahnbreite suchen
-                let mut rmax = None;
-                let mut q = ri;
-                while q <= ri + 3.0 * rr && crown_section(m, z1, zc, al, ha, c, base, q).is_ok() {
-                    rmax = Some(q);
-                    q += 0.25;
-                }
+                let rmax = crown_max_width(m, zc, z1, al, ha, c, base);
                 let t = match e {
                     Error::InvalidInput(t) => t,
                     o => return Err(o),
                 };
                 return Err(match rmax {
-                    Some(q) if q - ri >= 0.2 => bad(format!("Kronenrad: Zahnbreite zu groß – mit Z{z1}/Z{zc} höchstens etwa {:.1} mm (innen beginnt bei r = {ri:.1} mm der Unterschnitt, außen laufen die Zähne spitz zu).", q - ri)),
+                    Some(w) => bad(format!("Kronenrad: Zahnbreite zu groß – mit Z{z1}/Z{zc} höchstens etwa {w:.1} mm (innen beginnt bei r = {:.1} mm der Unterschnitt, außen laufen die Zähne spitz zu). Mit Breite 0 wählt das Plugin sie selbst.", 1.04 * rr * al.cos())),
                     _ => bad(format!("Kronenrad mit Ritzel Z{z1} / Rad Z{zc} nicht sinnvoll herstellbar ({t}) – ein Ritzel mit mehr Zähnen wählen (bei 20° etwa ab 15).")),
                 });
             }
@@ -1119,7 +1134,7 @@ fn build_crown(h: &mut dyn Host, name: &str, m: f64, zc: usize, z1: usize, al: f
     cmd(h, "solid.loft", json!({ "sections": names, "operation": "join", "targets": [name], "name": tn }))?;
     cmd(h, "solid.pattern.circular", json!({ "features": [tn], "axis": "Z", "count": zc, "name": format!("{name} Zahnkranz") }))?;
     bore(h, name, bore_d, 0.0, base)?;
-    Ok(json!({ "d": 2.0 * rr, "ri": ri, "ro": ro, "z_teilebene": base + (ha + c) * m, "z_kopf": base + (2.0 * ha + c) * m }))
+    Ok(json!({ "d": 2.0 * rr, "ri": ri, "ro": ro, "z_teilebene": base + (ha + c) * m, "z_kopf": base + (2.0 * ha + c) * m, "b": ro - ri }))
 }
 
 /// Kronenrad (Planrad): Scheibe in z = 0 .. base, Zaehne nach oben, ein Zahn bei Winkel 0.
@@ -1134,7 +1149,8 @@ fn pair_crown(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
     let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Kronenrad"));
     let info = build_crown(h, &n2, m, z2, z1, al * D2R, ha, c, b, base, p.num("bore2")?)?;
-    single(h, "spur", json!({ "name": n1, "m": m, "z": z1, "alpha": al, "beta": 0.0, "ha": ha, "c": c, "b": b, "bore": p.num("bore")?, "phase": PI / z1 as f64 }))?;
+    let bw = info["b"].as_f64().unwrap_or(b);
+    single(h, "spur", json!({ "name": n1, "m": m, "z": z1, "alpha": al, "beta": 0.0, "ha": ha, "c": c, "b": bw, "bore": p.num("bore")?, "phase": PI / z1 as f64 }))?;
     let r1 = m * z1 as f64 / 2.0;
     let (ri, zp) = (info["ri"].as_f64().unwrap_or(0.0), base + (ha + c) * m);
     // Ritzel: lokales z -> +X, x -> -Z (Zahnluecke nach unten), y -> +Y
