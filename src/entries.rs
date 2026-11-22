@@ -646,7 +646,7 @@ fn bad(s: impl Into<String>) -> Error {
 pub fn run(h: &mut dyn Host, entry: &str, params: &str) -> Result<String, Error> {
     let all = entries();
     let e = all.iter().find(|e| e.name == entry).ok_or_else(|| Error::Unsupported(format!("Unbekannter Eintrag „{entry}“")))?;
-    let p = Params::parse(e, params)?;
+    let mut p = Params::parse(e, params)?;
     if entry == "gear" {
         let ty = p.text("type");
         let target = TYPES.iter().find(|t| t.0 == ty).map(|t| t.1).ok_or_else(|| bad(format!("Unbekannte Art „{ty}“")))?;
@@ -658,6 +658,17 @@ pub fn run(h: &mut dyn Host, entry: &str, params: &str) -> Result<String, Error>
             }
         }
         return run(h, target, &Value::Object(obj).to_string());
+    }
+    // Einzelraeder: Zaehnezahl und Modul im Koerpernamen (Paare/Getriebe benennen ihre Teile selbst)
+    let tag = match entry {
+        "spur" | "internal" | "wheel" | "crown" | "bevel" => Some(zm(p.int("z")?, p.num("m")?)),
+        "rack" => Some(format!("m{}", fmt_i(p.num("m")?))),
+        "worm" => Some(format!("N{} m{}", p.int("N")?, fmt_i(p.num("m")?))),
+        _ => None,
+    };
+    if let Some(t) = tag {
+        let nm = format!("{} {t}", p.text("name"));
+        p.obj.insert("name".into(), Value::String(nm));
     }
     let summary = match entry {
         "spur" => spur(h, &p)?,
@@ -711,7 +722,7 @@ fn pair_spur(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let beta = p.num("beta")?;
     let a = m / (beta * D2R).cos() * (z1 + z2) as f64 / 2.0;
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
-    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Rad"));
+    let (n1, n2) = (format!("{name} Ritzel {}", zm(z1, m)), format!("{name} Rad {}", zm(z2, m)));
     let common = |nm: &str, z: usize, hand: &str, bore: f64, phase: f64| -> Result<Value, Error> {
         Ok(json!({ "name": nm, "m": m, "z": z, "alpha": p.num("alpha")?, "beta": beta, "hand": hand, "herringbone": p.flag("herringbone"),
             "ha": p.num("ha")?, "c": p.num("c")?, "b": p.num("b")?, "bore": bore, "phase": phase }))
@@ -731,7 +742,7 @@ fn pair_internal(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let beta = p.num("beta")?;
     let a = m / (beta * D2R).cos() * (z2 - z1) as f64 / 2.0;
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
-    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Hohlrad"));
+    let (n1, n2) = (format!("{name} Ritzel {}", zm(z1, m)), format!("{name} Hohlrad {}", zm(z2, m)));
     let hand = p.text("hand");
     let base = |nm: &str, z: usize| -> Result<serde_json::Map<String, Value>, Error> {
         let v = json!({ "name": nm, "m": m, "z": z, "alpha": p.num("alpha")?, "beta": beta, "hand": hand, "herringbone": p.flag("herringbone"),
@@ -759,7 +770,7 @@ fn pair_rack(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     };
     let (r, pt) = (m * z as f64 / 2.0, PI * m);
     let name = p.text("name");
-    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Zahnstange"));
+    let (n1, n2) = (format!("{name} Ritzel {}", zm(z, m)), format!("{name} Zahnstange m{}", fmt_i(m)));
     single(h, "spur", json!({ "name": n1, "m": m, "z": z, "alpha": p.num("alpha")?, "beta": 0.0, "ha": p.num("ha")?, "c": p.num("c")?,
         "b": p.num("b")?, "bore": p.num("bore")?, "phase": -PI / 2.0 }))?;
     single(h, "rack", json!({ "name": n2, "m": m, "n": n, "alpha": p.num("alpha")?, "ha": p.num("ha")?, "c": p.num("c")?, "b": p.num("b")?, "base": p.num("base")? }))?;
@@ -779,7 +790,7 @@ fn pair_worm(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let a = (q + z as f64) * m / 2.0;
     let pax = PI * m;
     let name = format!("{} (i={})", p.text("name"), fmt_i(z as f64 / nn as f64));
-    let (n1, n2) = (format!("{name} Schnecke"), format!("{name} Rad"));
+    let (n1, n2) = (format!("{name} Schnecke N{nn} m{}", fmt_i(m)), format!("{name} Rad {}", zm(z, m)));
     single(h, "worm", json!({ "name": n1, "m": m, "N": nn, "q": q, "alpha": p.num("alpha")?, "hand": p.text("hand"), "ha": ha, "c": p.num("c")?, "b": b, "bore": p.num("bore")? }))?;
     // Phasenlage: in der Mittelebene des Rades muss eine Luecke zur Schnecke zeigen
     let tw_mid = sg * (w / 2.0) * gam.tan() / r;
@@ -908,7 +919,7 @@ fn pair_bevel(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let (al, ha, c, b) = (p.num("alpha")? * D2R, p.num("ha")?, p.num("c")?, p.num("b")?);
     let (r1, r2) = (m * z1 as f64 / 2.0, m * z2 as f64 / 2.0);
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
-    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Rad"));
+    let (n1, n2) = (format!("{name} Ritzel {}", zm(z1, m)), format!("{name} Rad {}", zm(z2, m)));
     let a = build_bevel(h, &n1, m, z1, z2, al, ha, c, b, p.num("bore")?, 0.0)?;
     build_bevel(h, &n2, m, z2, z1, al, ha, c, b, p.num("bore2")?, PI - PI / z2 as f64)?;
     // Rad: lokales z -> -X, x -> +Z, y -> +Y; grosses Ende bei (r1, 0, r2), Spitze bei (0, 0, r2)
@@ -1147,7 +1158,7 @@ fn pair_crown(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let (m, z1, z2) = (p.num("m")?, p.int("z")?, p.int("z2")?);
     let (al, ha, c, b, base) = (p.num("alpha")?, p.num("ha")?, p.num("c")?, p.num("b")?, p.num("base")?);
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
-    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Kronenrad"));
+    let (n1, n2) = (format!("{name} Ritzel {}", zm(z1, m)), format!("{name} Kronenrad {}", zm(z2, m)));
     let info = build_crown(h, &n2, m, z2, z1, al * D2R, ha, c, b, base, p.num("bore2")?)?;
     let bw = info["b"].as_f64().unwrap_or(b);
     single(h, "spur", json!({ "name": n1, "m": m, "z": z1, "alpha": al, "beta": 0.0, "ha": ha, "c": c, "b": bw, "bore": p.num("bore")?, "phase": PI / z1 as f64 }))?;
@@ -1438,12 +1449,12 @@ fn gearbox(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
         let cum_before: f64 = stages[..k].iter().map(|s| s.z2 as f64 / s.z1 as f64).product();
         let cum_after = cum_before * s.z2 as f64 / s.z1 as f64;
         let n1 = if k == 0 {
-            format!("{name} Z1 Ritzel W1 (Antrieb)")
+            format!("{name} Ritzel {} W1 (Antrieb)", zm(s.z1, s.m))
         } else {
-            format!("{name} Z{} Ritzel W{} (i={})", 2 * k + 1, k + 1, fmt_i(cum_before))
+            format!("{name} Ritzel {} W{} (i={})", zm(s.z1, s.m), k + 1, fmt_i(cum_before))
         };
         let last = k + 1 == stages.len();
-        let n2 = format!("{name} Z{} Rad W{} (i={}{})", 2 * k + 2, k + 2, fmt_i(cum_after), if last { ", Abtrieb" } else { "" });
+        let n2 = format!("{name} Rad {} W{} (i={}{})", zm(s.z2, s.m), k + 2, fmt_i(cum_after), if last { ", Abtrieb" } else { "" });
         single(&mut c, "spur", gear_json(&n1, s.m, s.z1, al, s.beta, hand(right1), herr, ha, clr, s.w1, bore, 0.0))?;
         single(&mut c, "spur", gear_json(&n2, s.m, s.z2, al, s.beta, hand(!right1), herr, ha, clr, s.w2, bore, PI - PI / s.z2 as f64))?;
         if x[k] != 0.0 || zl != 0.0 {
@@ -1468,6 +1479,11 @@ fn compact(v: &Value) -> Value {
         Some(x) if x.fract() == 0.0 && x.abs() < 1e12 && v.is_f64() => json!(x as i64),
         _ => v.clone(),
     }
+}
+
+/// Kurzangabe fuer Koerpernamen: Zaehnezahl und Modul, z. B. "Z45 m2".
+fn zm(z: usize, m: f64) -> String {
+    format!("Z{z} m{}", fmt_i(m))
 }
 
 /// Übersetzung für Körpernamen: höchstens 2 Nachkommastellen, ohne überflüssige Nullen.

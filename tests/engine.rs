@@ -154,7 +154,7 @@ fn herringbone_is_two_sweeps_with_opposite_twist() {
     let t = |c: &(String, Value)| -> f64 { c.1["twist"].as_str().unwrap().trim_end_matches(" deg").parse().unwrap() };
     assert!((t(sw[0]) + t(sw[1])).abs() < 1e-6 && t(sw[0]) > 0.0);
     assert_eq!(sw[1].1["operation"], "join");
-    assert_eq!(sw[1].1["targets"], json!(["Stirnrad"]));
+    assert_eq!(sw[1].1["targets"], json!(["Stirnrad Z20 m2"]));
 }
 
 #[test]
@@ -288,7 +288,7 @@ fn pair_spur_places_second_gear_at_center_distance_with_opposite_hand() {
     let a = info["a"].as_f64().unwrap();
     assert!((a - 2.0 * 60.0 / 2.0 / 15f64.to_radians().cos()).abs() < 1e-9);
     let mv = r.calls.iter().find(|c| c.0 == "solid.move").unwrap();
-    assert_eq!(mv.1["bodies"], json!(["Paar (i=2) Rad"]));
+    assert_eq!(mv.1["bodies"], json!(["Paar (i=2) Rad Z40 m2"]));
     assert!((mv.1["translate"][0].as_f64().unwrap() - a).abs() < 1e-9);
     let twists: Vec<String> = r.calls.iter().filter(|c| c.0 == "solid.sweep").map(|c| c.1["twist"].as_str().unwrap().to_string()).collect();
     assert!(twists.iter().any(|t| !t.starts_with('-')) && twists.iter().any(|t| t.starts_with('-')), "{twists:?}");
@@ -335,9 +335,12 @@ fn zf(stages: &[(u32, u32)]) -> Value {
 fn gearbox_labels_stages_and_respects_call_budget() {
     let (r, out) = run("gearbox", zf(&[(20, 40), (18, 54), (15, 60)])).unwrap();
     let names: Vec<String> = r.calls.iter().filter(|c| c.0 == "solid.cylinder").filter_map(|c| c.1["body_name"].as_str().map(String::from)).collect();
-    for k in 1..=6 {
-        assert!(names.iter().any(|n| n.contains(&format!(" Z{k} "))), "Z{k} fehlt: {names:?}");
+    // Zaehnezahl und Modul stehen im Namen; i waechst mit jedem Rad, Antriebsritzel ohne i
+    for z in [20, 40, 18, 54, 15, 60] {
+        assert!(names.iter().any(|n| n.contains(&format!(" Z{z} m"))), "Z{z} fehlt: {names:?}");
     }
+    assert!(names.iter().any(|n| n.contains("Ritzel Z20 m2 W1 (Antrieb)")));
+    assert!(names.iter().any(|n| n.contains("Rad Z60 m2 W4 (i=24, Abtrieb)")), "{names:?}");
     assert!(r.calls.len() <= 64 + 25);
     assert!((out["uebersetzung_gesamt"].as_f64().unwrap() - 24.0).abs() < 1e-9);
     let six = zf(&[(20, 40), (20, 40), (20, 40), (20, 40)]);
