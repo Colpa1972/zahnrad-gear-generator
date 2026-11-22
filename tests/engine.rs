@@ -385,3 +385,31 @@ fn gearbox_per_gear_thickness_and_stage_helix() {
     let ext: Vec<f64> = r.calls.iter().filter(|c| c.0 == "solid.extrude").map(|c| c.1["distance"].as_f64().unwrap()).collect();
     assert!(ext.contains(&4.0) || r.calls.iter().any(|c| c.0 == "solid.sweep"));
 }
+
+#[test]
+fn bevel_cone_angle_follows_tooth_ratio_and_apexes_meet() {
+    let (r, out) = run("pair-bevel", json!({ "z": 16, "z2": 32, "m": 2, "b": 10 })).unwrap();
+    assert!((out["delta1"].as_f64().unwrap() - (0.5f64).atan().to_degrees()).abs() < 1e-9);
+    // beide Spitzen bei (0, 0, m*z2/2): Ritzel-Spitze liegt auf der Z-Achse, das Rad wird dorthin verschoben
+    assert_eq!(out["spitze"], json!([0.0, 0.0, 32.0]));
+    let mv = r.calls.iter().find(|c| c.0 == "solid.move").unwrap();
+    assert_eq!(mv.1["matrix"], json!([[0.0, 0.0, -1.0, 16.0], [0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 32.0]]));
+    assert_eq!(ids(&r).iter().filter(|i| **i == "solid.loft").count(), 2);
+    assert_eq!(ids(&r).iter().filter(|i| **i == "solid.pattern.circular").count(), 2);
+}
+
+#[test]
+fn bevel_rejects_too_wide_teeth_and_big_bore() {
+    assert!(run("bevel", json!({ "z": 20, "z2": 40, "b": 200 })).is_err());
+    assert!(run("bevel", json!({ "z": 20, "z2": 40, "bore": 30 })).is_err());
+    assert!(run("bevel", json!({ "z": 20, "z2": 40, "bore": 8 })).is_ok());
+}
+
+#[test]
+fn crown_teeth_stay_inside_pitch_and_pair_places_pinion_over_rim() {
+    let (r, out) = run("pair-crown", json!({ "z": 15, "z2": 45, "m": 2, "b": 12 })).unwrap();
+    assert_eq!(out["kronenrad"]["ri"], json!(39.0));
+    let mv = r.calls.iter().find(|c| c.0 == "solid.move").unwrap();
+    assert_eq!(mv.1["matrix"][0][3], json!(39.0));
+    assert!(run("crown", json!({ "z": 12, "b": 40 })).is_err());
+}

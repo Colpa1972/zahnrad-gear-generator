@@ -87,6 +87,21 @@ impl Outline {
         out
     }
 
+    /// Jeden Punkt (auch Stuetz- und Bogenpunkte) durch `f` abbilden; Anschluesse bleiben bitgleich.
+    pub fn mapped(&self, f: &dyn Fn(P2) -> P2) -> Outline {
+        Outline {
+            items: self
+                .items
+                .iter()
+                .map(|it| match it {
+                    Item::Spline(p) => Item::Spline(p.iter().map(|&q| f(q)).collect()),
+                    Item::Line(p) => Item::Line(p.iter().map(|&q| f(q)).collect()),
+                    Item::Arc { start, mid, end } => Item::Arc { start: f(*start), mid: f(*mid), end: f(*end) },
+                })
+                .collect(),
+        }
+    }
+
     pub fn rotated(&self, phi: f64) -> Outline {
         let (s, c) = phi.sin_cos();
         let rot = |p: P2| [p[0] * c - p[1] * s, p[0] * s + p[1] * c];

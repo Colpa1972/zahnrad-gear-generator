@@ -222,6 +222,81 @@ fn pair_entries() -> Vec<Entry> {
     ]
 }
 
+fn bevel_entries() -> Vec<Entry> {
+    let ha = || f("ha", "Kopfhöhenfaktor h*a", "", 1.0, Some(0.5), Some(1.5), "");
+    let c = || f("c", "Kopfspiel c*", "", 0.25, Some(0.0), Some(0.6), "");
+    let alpha = || f("alpha", "Eingriffswinkel α", "°", 20.0, Some(10.0), Some(30.0), "");
+    vec![
+        Entry {
+            name: "bevel",
+            menu: "Zahnrad: Kegelrad (geradverzahnt, 90°)",
+            ribbon: "",
+            fields: vec![
+                name_field(),
+                f("m", "Modul m (am großen Ende)", "mm", 2.0, Some(0.05), Some(50.0), ""),
+                f("z", "Z1 – Zähnezahl dieses Rades", "", 20.0, Some(6.0), Some(300.0), ""),
+                f("z2", "Z2 – Zähnezahl des Gegenrads", "", 40.0, Some(6.0), Some(300.0), "bestimmt den Teilkegelwinkel"),
+                alpha(),
+                ha(),
+                c(),
+                f("b", "Zahnbreite b (Mantellinie)", "mm", 10.0, Some(0.2), Some(500.0), ""),
+                f("bore", "Bohrung Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
+            ],
+        },
+        Entry {
+            name: "crown",
+            menu: "Zahnrad: Kronenrad (Planrad)",
+            ribbon: "",
+            fields: vec![
+                name_field(),
+                f("m", "Modul m", "mm", 2.0, Some(0.05), Some(50.0), ""),
+                f("z", "Zähnezahl z", "", 40.0, Some(6.0), Some(300.0), ""),
+                alpha(),
+                ha(),
+                c(),
+                f("b", "Zahnbreite b (radial)", "mm", 10.0, Some(0.2), Some(500.0), ""),
+                f("base", "Scheibendicke", "mm", 6.0, Some(0.5), None, "unter dem Zahnfuß"),
+                f("bore", "Bohrung Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
+            ],
+        },
+        Entry {
+            name: "pair-bevel",
+            menu: "Getriebe: Kegelradpaar Z1 + Z2 (90°)",
+            ribbon: "",
+            fields: vec![
+                name_field(),
+                f("m", "Modul m (am großen Ende)", "mm", 2.0, Some(0.05), Some(50.0), ""),
+                f("z", "Z1 – Zähnezahl Ritzel", "", 20.0, Some(6.0), Some(300.0), ""),
+                f("z2", "Z2 – Zähnezahl Rad", "", 40.0, Some(6.0), Some(300.0), ""),
+                alpha(),
+                ha(),
+                c(),
+                f("b", "Zahnbreite b (Mantellinie)", "mm", 10.0, Some(0.2), Some(500.0), ""),
+                f("bore", "Bohrung Ritzel Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
+                f("bore2", "Bohrung Rad Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
+            ],
+        },
+        Entry {
+            name: "pair-crown",
+            menu: "Getriebe: Kronenrad Z2 + Stirnritzel Z1",
+            ribbon: "",
+            fields: vec![
+                name_field(),
+                f("m", "Modul m", "mm", 2.0, Some(0.05), Some(50.0), ""),
+                f("z", "Z1 – Zähnezahl Ritzel", "", 15.0, Some(6.0), Some(300.0), ""),
+                f("z2", "Z2 – Zähnezahl Kronenrad", "", 45.0, Some(6.0), Some(300.0), ""),
+                alpha(),
+                ha(),
+                c(),
+                f("b", "Zahnbreite b (radial)", "mm", 12.0, Some(0.2), Some(500.0), ""),
+                f("base", "Scheibendicke Kronenrad", "mm", 6.0, Some(0.5), None, "unter dem Zahnfuß"),
+                f("bore", "Bohrung Ritzel Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
+                f("bore2", "Bohrung Kronenrad Ø", "mm", 0.0, Some(0.0), None, "0 = keine Bohrung"),
+            ],
+        },
+    ]
+}
+
 fn gearbox_entry() -> Entry {
     Entry {
         name: "gearbox",
@@ -277,12 +352,17 @@ pub const TYPES: &[(&str, &str)] = &[
     ("Paar: Ritzel + Hohlrad", "pair-internal"),
     ("Paar: Ritzel + Zahnstange", "pair-rack"),
     ("Paar: Schnecke + Schneckenrad", "pair-worm"),
+    ("Kegelrad (geradverzahnt, 90°)", "bevel"),
+    ("Kronenrad (Planrad)", "crown"),
+    ("Paar: Kegelrad + Kegelrad", "pair-bevel"),
+    ("Paar: Kronenrad + Stirnritzel", "pair-crown"),
     ("Getriebe mehrstufig (Z1, Z2, Z3 …)", "gearbox"),
 ];
 
 pub fn entries() -> Vec<Entry> {
     let mut all = single_entries();
     all.extend(pair_entries());
+    all.extend(bevel_entries());
     all.push(gearbox_entry());
     for e in all.iter_mut() {
         let nm = match e.name {
@@ -292,6 +372,10 @@ pub fn entries() -> Vec<Entry> {
             "worm" => "Schnecke",
             "wheel" => "Schneckenrad",
             "gearbox" => "Getriebe",
+            "bevel" => "Kegelrad",
+            "crown" => "Kronenrad",
+            "pair-bevel" => "Kegelradpaar",
+            "pair-crown" => "Kronenradpaar",
             _ => "Paar",
         };
         e.ribbon = match e.name {
@@ -304,6 +388,10 @@ pub fn entries() -> Vec<Entry> {
             "pair-internal" => "Hohlrad-Paar",
             "pair-rack" => "Zahnstangen-Paar",
             "pair-worm" => "Schnecken-Paar",
+            "bevel" => "Kegelrad",
+            "crown" => "Kronenrad",
+            "pair-bevel" => "Kegelrad-Paar",
+            "pair-crown" => "Kronenrad-Paar",
             _ => "Getriebe Z1…Zn",
         };
         if let Some(f) = e.fields.iter_mut().find(|f| f.key == "name") {
@@ -328,7 +416,7 @@ pub fn entries() -> Vec<Entry> {
         ("name", "Name"),
         ("m", "Modul m [mm] (Schnecke: Axialmodul)"),
         ("z", "Z1 – Zähnezahl (Einzelrad / Ritzel / Getriebe Stufe 1 Ritzel)"),
-        ("z2", "Z2 – Zähnezahl Gegenrad (Paar / Getriebe Stufe 1 Rad)"),
+        ("z2", "Z2 – Zähnezahl Gegenrad (Paar / Getriebe Stufe 1 Rad / Kegelrad: bestimmt den Kegelwinkel)"),
         ("z3", "Z3 – Getriebe Stufe 2 Ritzel (0 = keine weitere Stufe)"),
         ("z4", "Z4 – Getriebe Stufe 2 Rad"),
         ("z5", "Z5 – Getriebe Stufe 3 Ritzel (0 = keine)"),
@@ -356,12 +444,12 @@ pub fn entries() -> Vec<Entry> {
         ("x", "Profilverschiebung x (nur Einzelrad)"),
         ("ha", "Kopfhöhenfaktor h*a"),
         ("c", "Kopfspiel c*"),
-        ("b", "Zahnbreite b [mm] (Schnecke: Länge)"),
+        ("b", "Zahnbreite b [mm] (Schnecke: Länge; Kegelrad: Mantellinie; Kronenrad: radial)"),
         ("bore", "Bohrung Ø [mm] (Ritzel / Welle / Schnecke)"),
         ("bore2", "Bohrung Gegenrad Ø [mm]"),
         ("dout", "Hohlrad: Außen-Ø [mm] (0 = automatisch)"),
         ("n", "Zahnstange: Zähne (0 = automatisch)"),
-        ("base", "Zahnstange: Sockelhöhe [mm]"),
+        ("base", "Zahnstange: Sockelhöhe / Kronenrad: Scheibendicke [mm]"),
         ("N", "Schnecke: Gangzahl"),
         ("q", "Schnecke: Durchmesserzahl q"),
         ("bw", "Schneckenrad: Breite [mm] (0 = automatisch)"),
@@ -405,6 +493,10 @@ const TYPE_CHOICES: &[(&str, &str)] = &[
     ("Paar: Ritzel + Hohlrad", "Paar: Ritzel + Hohlrad"),
     ("Paar: Ritzel + Zahnstange", "Paar: Ritzel + Zahnstange"),
     ("Paar: Schnecke + Schneckenrad", "Paar: Schnecke + Schneckenrad"),
+    ("Kegelrad (geradverzahnt, 90°)", "Kegelrad (geradverzahnt, 90°)"),
+    ("Kronenrad (Planrad)", "Kronenrad (Planrad)"),
+    ("Paar: Kegelrad + Kegelrad", "Paar: Kegelrad + Kegelrad"),
+    ("Paar: Kronenrad + Stirnritzel", "Paar: Kronenrad + Stirnritzel"),
     ("Getriebe mehrstufig (Z1, Z2, Z3 …)", "Getriebe mehrstufig (Z1, Z2, Z3 …)"),
 ];
 
@@ -576,6 +668,10 @@ pub fn run(h: &mut dyn Host, entry: &str, params: &str) -> Result<String, Error>
         "pair-internal" => pair_internal(h, &p)?,
         "pair-rack" => pair_rack(h, &p)?,
         "pair-worm" => pair_worm(h, &p)?,
+        "bevel" => bevel(h, &p)?,
+        "crown" => crown(h, &p)?,
+        "pair-bevel" => pair_bevel(h, &p)?,
+        "pair-crown" => pair_crown(h, &p)?,
         "gearbox" => gearbox(h, &p)?,
         _ => unreachable!(),
     };
@@ -593,6 +689,8 @@ fn single(h: &mut dyn Host, entry: &str, obj: Value) -> Result<Value, Error> {
         "rack" => rack(h, &p),
         "worm" => worm(h, &p),
         "wheel" => wheel(h, &p),
+        "bevel" => bevel(h, &p),
+        "crown" => crown(h, &p),
         _ => unreachable!(),
     }
 }
@@ -691,6 +789,193 @@ fn pair_worm(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     // Drehung +90° um X (z -> -y, y -> z) und Verschiebung; als Matrix, damit die Drehrichtung eindeutig ist
     cmd(h, "solid.move", json!({ "bodies": [n2], "matrix": [[1.0, 0.0, 0.0, a], [0.0, 0.0, -1.0, w / 2.0], [0.0, 1.0, 0.0, z0]], "name": format!("{n2} platzieren") }))?;
     Ok(json!({ "a": a, "i": z as f64 / nn as f64, "gamma": gam.to_degrees(), "b_rad": w }))
+}
+
+// ---------------------------------------------------------------- Kegelrad, Kronenrad
+
+/// Geometrie eines geradverzahnten Kegelrads (Achswinkel 90°, Naeherung nach Tredgold):
+/// Das Zahnprofil des Ergaenzungs-Stirnrads (Ruecken­kegel) wird in der Ebene senkrecht zur Teilkegel-
+/// Mantellinie am Teilkreispunkt gezeichnet, zur Spitze hin verkleinert (Loft) und rundum vervielfacht.
+pub struct BevelGeo {
+    pub r: f64,     // Teilkreisradius am grossen Ende
+    pub delta: f64, // Teilkegelwinkel
+    pub apex: f64,  // Abstand Spitze - Ebene des grossen Endes (Achse)
+    pub re: f64,    // aeussere Teilkegellaenge
+    pub q: P2,      // Fussbeginn am grossen Ende (Radius, z) auf der Ruecken­kegel-Mantellinie
+    pub da: f64,    // Kopfkreisdurchmesser am grossen Ende
+    pub tooth: Outline, // Zahn in Skizzenkoordinaten (tangential, entlang der Rueckenkegel-Mantellinie)
+    pub rin: f64,   // Radius des innersten Zahnpunkts am grossen Ende
+}
+
+pub fn bevel_geo(m: f64, z: usize, z2: usize, al: f64, ha: f64, c: f64) -> Result<BevelGeo, Error> {
+    let delta = (z as f64).atan2(z2 as f64);
+    let (cd, sd) = (delta.cos(), delta.sin());
+    let r = m * z as f64 / 2.0;
+    let zv = z as f64 / cd;
+    let rv = r / cd;
+    let rb = rv * al.cos();
+    let st = m * PI / 2.0;
+    let half = move |rho: f64| st / (2.0 * rv) + inv(al) - inv((rb / rho).min(1.0).acos());
+    let ra_v = limit_tip(&half, rb, rv + ha * m, 0.2 * m);
+    let rf_v = rv - (ha + c) * m;
+    if rf_v <= 0.0 {
+        return Err(bad("Fußkreis ≤ 0: Zähnezahl zu klein oder Zahnhöhe zu groß."));
+    }
+    let rho0 = rf_v.max(rb);
+    let rho = involute_radii(rb, rho0, ra_v, 10);
+    let rin_v = (rf_v - 0.5 * m).max(0.5 * rf_v);
+    let nv = zv.round().max(3.0) as usize;
+    let o = external_tooth(nv, rf_v, rin_v, &rho, &half, 0.0).map_err(bad)?;
+    // Skizzenkoordinaten: x = tangential, y = Abstand vom Teilkreispunkt entlang der Rueckenkegel-Mantellinie
+    let tooth = o.mapped(&move |p: P2| [p[1], p[0] - rv]);
+    let apex = r / delta.tan();
+    // Mantellinie des Rueckenkegels (senkrecht zur Teilkegel-Mantellinie): (r + u*cd, +u*sd), u < 0 zum Fuss hin
+    let uq = rf_v - rv;
+    let ui = rin_v - rv;
+    Ok(BevelGeo {
+        r,
+        delta,
+        apex,
+        re: r / sd,
+        q: [r + uq * cd, uq * sd],
+        da: 2.0 * (r + (ra_v - rv) * cd),
+        tooth,
+        rin: r + ui * cd,
+    })
+}
+
+/// Zeichnet einen Umriss in eine beliebig im Raum liegende Skizzenebene.
+fn draw_profile_on(h: &mut dyn Host, sketch: &str, plane: Value, o: &Outline) -> Result<(), Error> {
+    cmd(h, "sketch.create", json!({ "plane": plane, "name": sketch }))?;
+    for it in &o.items {
+        match it {
+            Item::Spline(pts) => cmd(h, "sketch.spline.fit_point", json!({ "points": pts }))?,
+            Item::Line(pts) => cmd(h, "sketch.line", json!({ "points": pts }))?,
+            Item::Arc { start, mid, end } => cmd(h, "sketch.arc.three_point", json!({ "start": start, "end": end, "through": mid }))?,
+        };
+    }
+    cmd(h, "sketch.finish", json!({}))?;
+    Ok(())
+}
+
+fn build_bevel(h: &mut dyn Host, name: &str, m: f64, z: usize, z2: usize, al: f64, ha: f64, c: f64, b: f64, bore_d: f64, phase: f64) -> Result<Value, Error> {
+    let g = bevel_geo(m, z, z2, al, ha, c)?;
+    if b >= 0.6 * g.re {
+        return Err(bad(format!("Zahnbreite zu groß: höchstens 0,6 · Kegellänge ({:.1} mm); üblich ist ein Drittel.", 0.6 * g.re)));
+    }
+    let k = (g.re - b) / g.re;
+    let (cd, sd) = (g.delta.cos(), g.delta.sin());
+    let hh = g.apex * (1.0 - k); // Hoehe der Teilkreisebene des kleinen Endes
+    // Rohling: Kegelstumpf auf dem Fusskegel zwischen zwei Ebenen senkrecht zur Achse; er umfasst den
+    // Zahnfuss an beiden Enden (Skizzen-y der Zaehne zeigt entlang des Rueckenkegels, daher z = u * sin(delta)).
+    let z_in = ((g.rin - g.r) / cd) * sd; // z des innersten Zahnpunkts am grossen Ende (negativ)
+    let z_lo = z_in - 1.0;
+    let z_hi = hh + (1.0f64).min(0.5 * (g.apex - hh));
+    let root_r = |zz: f64| g.q[0] * (g.apex - zz) / (g.apex - g.q[1]);
+    if bore_d / 2.0 >= root_r(z_hi) - 0.3 * m {
+        return Err(bad("Bohrung zu groß für das kleine Ende des Rades."));
+    }
+    cmd(h, "solid.cone", json!({ "radius": root_r(z_lo), "top_radius": root_r(z_hi), "height": z_hi - z_lo, "base": [0.0, 0.0, z_lo], "axis": "Z", "operation": "new", "name": format!("{name} Kegel"), "body_name": name }))?;
+    let (zb, zf) = (z_lo, z_hi);
+    let (cp, sp) = (phase.cos(), phase.sin());
+    let frame = |s: f64| {
+        json!({ "origin": [s * g.r * cp, s * g.r * sp, g.apex * (1.0 - s)], "x_dir": [-sp, cp, 0.0], "y_dir": [cd * cp, cd * sp, sd] })
+    };
+    let t1 = g.tooth.mapped(&move |p: P2| [p[0] * k, p[1] * k]);
+    let (s0, s1) = (format!("{name} Zahn gross"), format!("{name} Zahn klein"));
+    draw_profile_on(h, &s0, frame(1.0), &g.tooth)?;
+    draw_profile_on(h, &s1, frame(k), &t1)?;
+    let tn = format!("{name} Zahn");
+    cmd(h, "solid.loft", json!({ "sections": [{ "sketch": s0 }, { "sketch": s1 }], "operation": "join", "targets": [name], "name": tn }))?;
+    if z > 1 {
+        cmd(h, "solid.pattern.circular", json!({ "features": [tn], "axis": "Z", "count": z, "name": format!("{name} Zahnkranz") }))?;
+    }
+    if bore_d > 0.0 {
+        cmd(h, "solid.cylinder", json!({ "diameter": bore_d, "height": zf - zb + 2.0, "base": [0.0, 0.0, zb - 1.0], "operation": "cut", "targets": [name], "name": format!("{name} Bohrung") }))?;
+    }
+    Ok(json!({ "d": 2.0 * g.r, "da": g.da, "delta": g.delta.to_degrees(), "kegellaenge": g.re, "spitze_z": g.apex, "z_von": zb, "z_bis": zf }))
+}
+
+/// Kegelrad einzeln: grosses Ende in der Ebene z = 0, Spitze auf der Z-Achse bei z = apex.
+fn bevel(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
+    build_bevel(h, &p.text("name"), p.num("m")?, p.int("z")?, p.int("z2")?, p.num("alpha")? * D2R, p.num("ha")?, p.num("c")?, p.num("b")?, p.num("bore")?, p.extra("phase"))
+}
+
+/// Kegelradpaar 90°: Ritzel auf der Z-Achse, Rad mit Achse in X-Richtung; beide Spitzen fallen zusammen.
+fn pair_bevel(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
+    let (m, z1, z2) = (p.num("m")?, p.int("z")?, p.int("z2")?);
+    let (al, ha, c, b) = (p.num("alpha")? * D2R, p.num("ha")?, p.num("c")?, p.num("b")?);
+    let (r1, r2) = (m * z1 as f64 / 2.0, m * z2 as f64 / 2.0);
+    let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
+    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Rad"));
+    let a = build_bevel(h, &n1, m, z1, z2, al, ha, c, b, p.num("bore")?, 0.0)?;
+    build_bevel(h, &n2, m, z2, z1, al, ha, c, b, p.num("bore2")?, PI - PI / z2 as f64)?;
+    // Rad: lokales z -> -X, x -> +Z, y -> +Y; grosses Ende bei (r1, 0, r2), Spitze bei (0, 0, r2)
+    cmd(h, "solid.move", json!({ "bodies": [n2], "matrix": [[0.0, 0.0, -1.0, r1], [0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, r2]], "name": format!("{n2} platzieren") }))?;
+    Ok(json!({ "i": z2 as f64 / z1 as f64, "spitze": [0.0, 0.0, r2], "delta1": a["delta"] }))
+}
+
+/// Zahnquerschnitt eines Kronenrads in der Ebene x = rho (Koordinaten y, z).
+fn crown_section(m: f64, zc: usize, al: f64, ha: f64, c: f64, base: f64, rho: f64) -> Result<Vec<P2>, Error> {
+    // Zahndicke in der Teilebene: Teilung 2*pi*rho/z minus die (konstante) Zahndicke des Ritzels pi*m/2
+    let half_p = PI * rho / zc as f64 - PI * m / 4.0 - 0.03 * m; // 0,03 m Flankenspiel je Seite
+    let (zr, zp) = (base, base + (ha + c) * m);
+    let zt = zp + ha * m;
+    let tr = half_p + (ha + c) * m * al.tan();
+    let tt = half_p - ha * m * al.tan();
+    if tt < 0.1 * m {
+        return Err(bad("Kronenrad: Zahn am Kopf zu spitz (Breite zu groß oder Zähnezahl zu klein)."));
+    }
+    if 2.0 * tr >= 2.0 * PI * rho / zc as f64 - 0.05 * m || half_p <= 0.0 {
+        return Err(bad("Kronenrad: Zähne am Fuß zu breit für die Teilung (Zahnbreite verkleinern)."));
+    }
+    Ok(vec![[-tr, zr - 1.0], [tr, zr - 1.0], [tr, zr], [tt, zt], [-tt, zt], [-tr, zr], [-tr, zr - 1.0]])
+}
+
+fn build_crown(h: &mut dyn Host, name: &str, m: f64, zc: usize, al: f64, ha: f64, c: f64, b: f64, base: f64, bore_d: f64) -> Result<Value, Error> {
+    let rr = m * zc as f64 / 2.0;
+    if b > 0.6 * rr {
+        return Err(bad(format!("Zahnbreite zu groß: höchstens 0,6 · Teilkreisradius ({:.1} mm).", 0.6 * rr)));
+    }
+    let (ri, ro) = (rr - b / 2.0, rr + b / 2.0);
+    if bore_d / 2.0 >= ri - 0.5 * m {
+        return Err(bad("Bohrung zu groß für den Zahnkranz."));
+    }
+    let si = crown_section(m, zc, al, ha, c, base, ri)?;
+    let so = crown_section(m, zc, al, ha, c, base, ro)?;
+    let rd = ro.hypot(so[1][0]) + 0.3;
+    cmd(h, "solid.cylinder", json!({ "diameter": 2.0 * rd, "height": base, "base": [0.0, 0.0, 0.0], "operation": "new", "name": format!("{name} Scheibe"), "body_name": name }))?;
+    let (s0, s1) = (format!("{name} Zahn innen"), format!("{name} Zahn aussen"));
+    for (nm, rho, pts) in [(&s0, ri, &si), (&s1, ro, &so)] {
+        cmd(h, "sketch.create", json!({ "plane": "YZ", "offset": rho, "name": nm }))?;
+        cmd(h, "sketch.line", json!({ "points": pts }))?;
+        cmd(h, "sketch.finish", json!({}))?;
+    }
+    let tn = format!("{name} Zahn");
+    cmd(h, "solid.loft", json!({ "sections": [{ "sketch": s0 }, { "sketch": s1 }], "operation": "join", "targets": [name], "name": tn }))?;
+    cmd(h, "solid.pattern.circular", json!({ "features": [tn], "axis": "Z", "count": zc, "name": format!("{name} Zahnkranz") }))?;
+    bore(h, name, bore_d, 0.0, base)?;
+    Ok(json!({ "d": 2.0 * rr, "ri": ri, "ro": ro, "z_teilebene": base + (ha + c) * m, "z_kopf": base + (2.0 * ha + c) * m }))
+}
+
+/// Kronenrad (Planrad): Scheibe in z = 0 .. base, Zaehne nach oben, ein Zahn bei Winkel 0.
+fn crown(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
+    build_crown(h, &p.text("name"), p.num("m")?, p.int("z")?, p.num("alpha")? * D2R, p.num("ha")?, p.num("c")?, p.num("b")?, p.num("base")?, p.num("bore")?)
+}
+
+/// Kronenrad + Stirnritzel: Ritzelachse liegt radial (X-Richtung) ueber dem Zahnkranz und schneidet die Radachse.
+fn pair_crown(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
+    let (m, z1, z2) = (p.num("m")?, p.int("z")?, p.int("z2")?);
+    let (al, ha, c, b, base) = (p.num("alpha")?, p.num("ha")?, p.num("c")?, p.num("b")?, p.num("base")?);
+    let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
+    let (n1, n2) = (format!("{name} Ritzel"), format!("{name} Kronenrad"));
+    let info = build_crown(h, &n2, m, z2, al * D2R, ha, c, b, base, p.num("bore2")?)?;
+    single(h, "spur", json!({ "name": n1, "m": m, "z": z1, "alpha": al, "beta": 0.0, "ha": ha, "c": c, "b": b, "bore": p.num("bore")?, "phase": PI / z1 as f64 }))?;
+    let r1 = m * z1 as f64 / 2.0;
+    let (rr, zp) = (m * z2 as f64 / 2.0, base + (ha + c) * m);
+    // Ritzel: lokales z -> +X, x -> -Z (Zahnluecke nach unten), y -> +Y
+    cmd(h, "solid.move", json!({ "bodies": [n1], "matrix": [[0.0, 0.0, 1.0, rr - b / 2.0], [0.0, 1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, zp + r1]], "name": format!("{n1} platzieren") }))?;
+    Ok(json!({ "i": z2 as f64 / z1 as f64, "kronenrad": info }))
 }
 
 /// Verzahnung eines Stirnrads (gerade, schräg, Pfeil).
