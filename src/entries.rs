@@ -366,6 +366,11 @@ pub fn entries() -> Vec<Entry> {
     all.extend(bevel_entries());
     all.push(gearbox_entry());
     for e in all.iter_mut() {
+        if e.name.starts_with("pair-") || e.name == "gearbox" {
+            e.fields.push(check("joints", "Drehgelenke und Kopplung einbauen (Bewegungssimulation)", true));
+        }
+    }
+    for e in all.iter_mut() {
         let nm = match e.name {
             "spur" => "Stirnrad",
             "internal" => "Hohlrad",
@@ -442,6 +447,7 @@ pub fn entries() -> Vec<Entry> {
         ("beta4", "Getriebe Stufe 4 · β4 [°] (0 = wie β, -1 = gerade)"),
         ("hand", "Steigungsrichtung"),
         ("herringbone", "Pfeilverzahnung (Doppelschräg)"),
+        ("joints", "Drehgelenke + Kopplung einbauen (Simulation)"),
         ("x", "Profilverschiebung x (nur Einzelrad)"),
         ("ha", "Kopfhöhenfaktor h*a"),
         ("c", "Kopfspiel c*"),
@@ -727,9 +733,22 @@ fn pair_spur(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
         Ok(json!({ "name": nm, "m": m, "z": z, "alpha": p.num("alpha")?, "beta": beta, "hand": hand, "herringbone": p.flag("herringbone"),
             "ha": p.num("ha")?, "c": p.num("c")?, "b": p.num("b")?, "bore": bore, "phase": phase }))
     };
+    let jn = p.flag("joints");
+    joints_start(h, jn)?;
+    part_begin(h, jn, &n1)?;
     single(h, "spur", common(&n1, z1, &p.text("hand"), p.num("bore")?, 0.0)?)?;
+    part_end(h, jn)?;
+    part_begin(h, jn, &n2)?;
     single(h, "spur", common(&n2, z2, other_hand(p), p.num("bore2")?, PI - PI / z2 as f64)?)?;
     mv(h, &n2, [a, 0.0, 0.0])?;
+    part_end(h, jn)?;
+    if jn {
+        let (j1, j2) = (format!("Drehgelenk {n1}"), format!("Drehgelenk {n2}"));
+        joint_to_frame(h, "revolute", &j1, &n1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        joint_to_frame(h, "revolute", &j2, &n2, [a, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        cmd(h, "joint.gear", json!({ "a": j1, "b": j2, "ra": z1, "rb": z2 }))?;
+        drive_study(h, &name, &j1, 360.0)?;
+    }
     Ok(json!({ "a": a, "i": z2 as f64 / z1 as f64 }))
 }
 
@@ -749,15 +768,28 @@ fn pair_internal(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
             "ha": p.num("ha")?, "c": p.num("c")?, "b": p.num("b")? });
         Ok(v.as_object().unwrap().clone())
     };
+    let jn = p.flag("joints");
+    joints_start(h, jn)?;
     let mut o1 = base(&n1, z1)?;
     o1.insert("bore".into(), json!(p.num("bore")?));
+    part_begin(h, jn, &n1)?;
     single(h, "spur", Value::Object(o1))?;
+    part_end(h, jn)?;
+    part_begin(h, jn, &n2)?;
     let mut o2 = base(&n2, z2)?;
     o2.insert("dout".into(), json!(p.num("dout")?));
     // Der Hohlraum hat seine Zahnluecke bei 0 Grad; das Ritzel-Zahn muss in eine Luecke: halbe Teilung weiterdrehen.
     o2.insert("phase".into(), json!(PI / z2 as f64));
     single(h, "internal", Value::Object(o2))?;
     mv(h, &n2, [-a, 0.0, 0.0])?;
+    part_end(h, jn)?;
+    if jn {
+        let (j1, j2) = (format!("Drehgelenk {n1}"), format!("Drehgelenk {n2}"));
+        joint_to_frame(h, "revolute", &j1, &n1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        joint_to_frame(h, "revolute", &j2, &n2, [-a, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        cmd(h, "joint.gear", json!({ "a": j1, "b": j2, "ra": z1, "rb": z2, "internal": true }))?;
+        drive_study(h, &name, &j1, 360.0)?;
+    }
     Ok(json!({ "a": a, "i": z2 as f64 / z1 as f64 }))
 }
 
@@ -771,11 +803,24 @@ fn pair_rack(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let (r, pt) = (m * z as f64 / 2.0, PI * m);
     let name = p.text("name");
     let (n1, n2) = (format!("{name} Ritzel {}", zm(z, m)), format!("{name} Zahnstange m{}", fmt_i(m)));
+    let jn = p.flag("joints");
+    joints_start(h, jn)?;
+    part_begin(h, jn, &n1)?;
     single(h, "spur", json!({ "name": n1, "m": m, "z": z, "alpha": p.num("alpha")?, "beta": 0.0, "ha": p.num("ha")?, "c": p.num("c")?,
         "b": p.num("b")?, "bore": p.num("bore")?, "phase": -PI / 2.0 }))?;
+    part_end(h, jn)?;
+    part_begin(h, jn, &n2)?;
     single(h, "rack", json!({ "name": n2, "m": m, "n": n, "alpha": p.num("alpha")?, "ha": p.num("ha")?, "c": p.num("c")?, "b": p.num("b")?, "base": p.num("base")? }))?;
     let sx = -((n / 2) as f64) * pt;
     mv(h, &n2, [sx, -r, 0.0])?;
+    part_end(h, jn)?;
+    if jn {
+        let (j1, j2) = (format!("Drehgelenk {n1}"), format!("Schiebegelenk {n2}"));
+        joint_to_frame(h, "revolute", &j1, &n1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        joint_to_frame(h, "slider", &j2, &n2, [0.0, -r, 0.0], [1.0, 0.0, 0.0])?;
+        cmd(h, "joint.rack_pinion", json!({ "a": j1, "b": j2, "radius": r }))?;
+        drive_study(h, &name, &j1, 360.0)?;
+    }
     Ok(json!({ "r": r, "n": n, "L": n as f64 * pt }))
 }
 
@@ -791,7 +836,12 @@ fn pair_worm(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let pax = PI * m;
     let name = format!("{} (i={})", p.text("name"), fmt_i(z as f64 / nn as f64));
     let (n1, n2) = (format!("{name} Schnecke N{nn} m{}", fmt_i(m)), format!("{name} Rad {}", zm(z, m)));
+    let jn = p.flag("joints");
+    joints_start(h, jn)?;
+    part_begin(h, jn, &n1)?;
     single(h, "worm", json!({ "name": n1, "m": m, "N": nn, "q": q, "alpha": p.num("alpha")?, "hand": p.text("hand"), "ha": ha, "c": p.num("c")?, "b": b, "bore": p.num("bore")? }))?;
+    part_end(h, jn)?;
+    part_begin(h, jn, &n2)?;
     // Phasenlage: in der Mittelebene des Rades muss eine Luecke zur Schnecke zeigen
     let tw_mid = sg * (w / 2.0) * gam.tan() / r;
     let phase = PI - PI / z as f64 - tw_mid;
@@ -800,6 +850,15 @@ fn pair_worm(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let z0 = ((b / 2.0) / pax).round() * pax;
     // Drehung +90° um X (z -> -y, y -> z) und Verschiebung; als Matrix, damit die Drehrichtung eindeutig ist
     cmd(h, "solid.move", json!({ "bodies": [n2], "matrix": [[1.0, 0.0, 0.0, a], [0.0, 0.0, -1.0, w / 2.0], [0.0, 1.0, 0.0, z0]], "name": format!("{n2} platzieren") }))?;
+    part_end(h, jn)?;
+    if jn {
+        let (j1, j2) = (format!("Drehgelenk {n1}"), format!("Drehgelenk {n2}"));
+        joint_to_frame(h, "revolute", &j1, &n1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        joint_to_frame(h, "revolute", &j2, &n2, [a, 0.0, z0], [0.0, -1.0, 0.0])?;
+        // Rad dreht je Schneckenumdrehung um N/Z Umdrehungen; Vorzeichen: siehe Test in SolidCraft
+        cmd(h, "joint.motion_link", json!({ "a": j1, "b": j2, "ratio": WORM_SIGN * sg * nn as f64 / z as f64 }))?;
+        drive_study(h, &name, &j1, 360.0)?;
+    }
     Ok(json!({ "a": a, "i": z as f64 / nn as f64, "gamma": gam.to_degrees(), "b_rad": w }))
 }
 
@@ -920,10 +979,23 @@ fn pair_bevel(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let (r1, r2) = (m * z1 as f64 / 2.0, m * z2 as f64 / 2.0);
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
     let (n1, n2) = (format!("{name} Ritzel {}", zm(z1, m)), format!("{name} Rad {}", zm(z2, m)));
+    let jn = p.flag("joints");
+    joints_start(h, jn)?;
+    part_begin(h, jn, &n1)?;
     let a = build_bevel(h, &n1, m, z1, z2, al, ha, c, b, p.num("bore")?, 0.0)?;
+    part_end(h, jn)?;
+    part_begin(h, jn, &n2)?;
     build_bevel(h, &n2, m, z2, z1, al, ha, c, b, p.num("bore2")?, PI - PI / z2 as f64)?;
     // Rad: lokales z -> -X, x -> +Z, y -> +Y; grosses Ende bei (r1, 0, r2), Spitze bei (0, 0, r2)
     cmd(h, "solid.move", json!({ "bodies": [n2], "matrix": [[0.0, 0.0, -1.0, r1], [0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, r2]], "name": format!("{n2} platzieren") }))?;
+    part_end(h, jn)?;
+    if jn {
+        let (j1, j2) = (format!("Drehgelenk {n1}"), format!("Drehgelenk {n2}"));
+        joint_to_frame(h, "revolute", &j1, &n1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        joint_to_frame(h, "revolute", &j2, &n2, [0.0, 0.0, r2], [-1.0, 0.0, 0.0])?;
+        cmd(h, "joint.motion_link", json!({ "a": j1, "b": j2, "ratio": BEVEL_SIGN * z1 as f64 / z2 as f64 }))?;
+        drive_study(h, &name, &j1, 360.0)?;
+    }
     Ok(json!({ "i": z2 as f64 / z1 as f64, "spitze": [0.0, 0.0, r2], "delta1": a["delta"] }))
 }
 
@@ -1159,13 +1231,26 @@ fn pair_crown(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
     let (al, ha, c, b, base) = (p.num("alpha")?, p.num("ha")?, p.num("c")?, p.num("b")?, p.num("base")?);
     let name = format!("{} (i={})", p.text("name"), fmt_i(z2 as f64 / z1 as f64));
     let (n1, n2) = (format!("{name} Ritzel {}", zm(z1, m)), format!("{name} Kronenrad {}", zm(z2, m)));
+    let jn = p.flag("joints");
+    joints_start(h, jn)?;
+    part_begin(h, jn, &n2)?;
     let info = build_crown(h, &n2, m, z2, z1, al * D2R, ha, c, b, base, p.num("bore2")?)?;
+    part_end(h, jn)?;
     let bw = info["b"].as_f64().unwrap_or(b);
+    part_begin(h, jn, &n1)?;
     single(h, "spur", json!({ "name": n1, "m": m, "z": z1, "alpha": al, "beta": 0.0, "ha": ha, "c": c, "b": bw, "bore": p.num("bore")?, "phase": PI / z1 as f64 }))?;
     let r1 = m * z1 as f64 / 2.0;
     let (ri, zp) = (info["ri"].as_f64().unwrap_or(0.0), base + (ha + c) * m);
     // Ritzel: lokales z -> +X, x -> -Z (Zahnluecke nach unten), y -> +Y
     cmd(h, "solid.move", json!({ "bodies": [n1], "matrix": [[0.0, 0.0, 1.0, ri], [0.0, 1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, zp + r1]], "name": format!("{n1} platzieren") }))?;
+    part_end(h, jn)?;
+    if jn {
+        let (j1, j2) = (format!("Drehgelenk {n1}"), format!("Drehgelenk {n2}"));
+        joint_to_frame(h, "revolute", &j1, &n1, [0.0, 0.0, zp + r1], [1.0, 0.0, 0.0])?;
+        joint_to_frame(h, "revolute", &j2, &n2, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        cmd(h, "joint.motion_link", json!({ "a": j1, "b": j2, "ratio": CROWN_SIGN * z1 as f64 / z2 as f64 }))?;
+        drive_study(h, &name, &j1, 360.0)?;
+    }
     Ok(json!({ "i": z2 as f64 / z1 as f64, "kronenrad": info }))
 }
 
@@ -1363,6 +1448,11 @@ fn gear_json(name: &str, m: f64, z: usize, al: f64, beta: f64, hand: &str, herr:
 /// Aufrufe je Lauf, damit das Host-Limit von SolidCraft nicht erreicht wird.
 const CALL_BUDGET: usize = 64;
 
+// Drehrichtung der Kopplung bei Paaren mit gekreuzten Achsen (Vorzeichen von Rad-Winkel je Ritzel-Winkel); in SolidCraft geprueft.
+const WORM_SIGN: f64 = 1.0;
+const BEVEL_SIGN: f64 = -1.0;
+const CROWN_SIGN: f64 = 1.0;
+
 struct Stage {
     z1: usize,
     z2: usize,
@@ -1432,12 +1522,21 @@ fn gearbox(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
         x.push(x.last().unwrap() + a);
         level.push(level.last().unwrap() + s.w1.max(s.w2) + gap);
     }
+    let jn = p.flag("joints");
+    // Eine Komponente je Welle: Rad und Ritzel auf derselben Welle drehen gemeinsam.
+    let shaft = |n: usize| format!("{name} Welle W{n}");
+    let jname = |n: usize| format!("Drehgelenk Welle W{n}");
     let mut c = Counted { inner: h, n: 0 };
     let mut labels: Vec<Value> = Vec::new();
     let mut next_stage: Option<usize> = None;
     let mut last_cost = 0;
+    joints_start(&mut c, jn)?;
+    let mut new_shafts: Vec<usize> = Vec::new();
+    let mut built: Vec<usize> = Vec::new();
     for (k, s) in stages.iter().enumerate().skip(from - 1) {
-        if c.n > 0 && c.n + last_cost > CALL_BUDGET {
+        // Platz fuer Gelenke dieses Laufs vorhalten (je Welle ein Gelenk, je Stufe eine Kopplung, eine Studie)
+        let reserve = if jn { 2 * (built.len() + 2) + 3 } else { 0 };
+        if c.n > 0 && c.n + last_cost + reserve > CALL_BUDGET {
             next_stage = Some(k + 1);
             break;
         }
@@ -1455,15 +1554,42 @@ fn gearbox(h: &mut dyn Host, p: &Params) -> Result<Value, Error> {
         };
         let last = k + 1 == stages.len();
         let n2 = format!("{name} Rad {} W{} (i={}{})", zm(s.z2, s.m), k + 2, fmt_i(cum_after), if last { ", Abtrieb" } else { "" });
+        if jn {
+            if k == 0 {
+                part_begin(&mut c, true, &shaft(1))?;
+                new_shafts.push(1);
+            } else {
+                cmd(&mut c, "component.activate", json!({ "component": shaft(k + 1) }))?;
+            }
+        }
         single(&mut c, "spur", gear_json(&n1, s.m, s.z1, al, s.beta, hand(right1), herr, ha, clr, s.w1, bore, 0.0))?;
-        single(&mut c, "spur", gear_json(&n2, s.m, s.z2, al, s.beta, hand(!right1), herr, ha, clr, s.w2, bore, PI - PI / s.z2 as f64))?;
         if x[k] != 0.0 || zl != 0.0 {
             mv(&mut c, &n1, [x[k], 0.0, zl])?;
         }
+        part_end(&mut c, jn)?;
+        if jn {
+            part_begin(&mut c, true, &shaft(k + 2))?;
+            new_shafts.push(k + 2);
+        }
+        single(&mut c, "spur", gear_json(&n2, s.m, s.z2, al, s.beta, hand(!right1), herr, ha, clr, s.w2, bore, PI - PI / s.z2 as f64))?;
         mv(&mut c, &n2, [x[k + 1], 0.0, zl])?;
+        part_end(&mut c, jn)?;
+        built.push(k);
         labels.push(json!({ "stufe": k + 1, format!("Z{}", 2 * k + 1): s.z1, format!("Z{}", 2 * k + 2): s.z2, "modul": s.m, "beta": s.beta,
             "dicke": [s.w1, s.w2], "welle": [k + 1, k + 2], "x": x[k], "x2": x[k + 1], "ebene_z": zl, "i_stufe": s.z2 as f64 / s.z1 as f64, "i_bis_hier": cum_after }));
         last_cost = c.n - start;
+    }
+    if jn {
+        for &sh in &new_shafts {
+            joint_to_frame(&mut c, "revolute", &jname(sh), &shaft(sh), [x[sh - 1], 0.0, 0.0], [0.0, 0.0, 1.0])?;
+        }
+        for &k in &built {
+            let s = &stages[k];
+            cmd(&mut c, "joint.gear", json!({ "a": jname(k + 1), "b": jname(k + 2), "ra": s.z1, "rb": s.z2 }))?;
+        }
+        if from == 1 {
+            drive_study(&mut c, &name, &jname(1), 360.0)?;
+        }
     }
     let ratio: f64 = stages.iter().map(|s| s.z2 as f64 / s.z1 as f64).product();
     let mut out = json!({ "stufen": stages.len(), "uebersetzung_gesamt": ratio, "i_erklaerung": "i = n_an / n_ab = Z2/Z1 · Z4/Z3 · … (i > 1: Untersetzung ins Langsame; Verhältnis der Teilkreise, nicht der Kopfkreise)", "gebaut": labels, "aufrufe": c.n });
@@ -1479,6 +1605,41 @@ fn compact(v: &Value) -> Value {
         Some(x) if x.fract() == 0.0 && x.abs() < 1e12 && v.is_f64() => json!(x as i64),
         _ => v.clone(),
     }
+}
+
+/// Bauteil als eigene Komponente (nur wenn Gelenke gewuenscht): die danach erzeugten Koerper entstehen darin.
+fn part_begin(h: &mut dyn Host, on: bool, name: &str) -> Result<(), Error> {
+    if on {
+        cmd(h, "component.create", json!({ "name": name, "grounded": false }))?;
+    }
+    Ok(())
+}
+
+/// Zu Beginn des Laufs das Gestell (Wurzel) aktivieren: neue Komponenten entstehen darunter.
+fn joints_start(h: &mut dyn Host, on: bool) -> Result<(), Error> {
+    if on {
+        cmd(h, "component.activate", json!({ "component": "root" }))?;
+    }
+    Ok(())
+}
+
+fn part_end(h: &mut dyn Host, on: bool) -> Result<(), Error> {
+    if on {
+        cmd(h, "component.activate", json!({ "component": "root" }))?;
+    }
+    Ok(())
+}
+
+/// Drehgelenk (oder Schiebegelenk) zwischen Gestell (Wurzel, fest) und Bauteil, dort wo es steht: Achse durch `point` in Richtung `z`.
+fn joint_to_frame(h: &mut dyn Host, kind: &str, name: &str, comp: &str, point: [f64; 3], z: [f64; 3]) -> Result<(), Error> {
+    cmd(h, "joint.as_built", json!({ "type": kind, "a": 0, "b": comp, "at": { "point": point, "z": z }, "name": name, "quiet": true }))?;
+    Ok(())
+}
+
+/// Bewegungsstudie: das Antriebsgelenk dreht sich in 100 Schritten um `deg` Grad.
+fn drive_study(h: &mut dyn Host, name: &str, joint: &str, deg: f64) -> Result<(), Error> {
+    cmd(h, "motion.study", json!({ "name": format!("{name} Antrieb"), "steps": 100, "keys": [{ "joint": joint, "points": [[0, 0], [100, deg]] }] }))?;
+    Ok(())
 }
 
 /// Kurzangabe fuer Koerpernamen: Zaehnezahl und Modul, z. B. "Z45 m2".

@@ -333,7 +333,9 @@ fn zf(stages: &[(u32, u32)]) -> Value {
 
 #[test]
 fn gearbox_labels_stages_and_respects_call_budget() {
-    let (r, out) = run("gearbox", zf(&[(20, 40), (18, 54), (15, 60)])).unwrap();
+    let mut three = zf(&[(20, 40), (18, 54), (15, 60)]);
+    three["joints"] = json!(false);
+    let (r, out) = run("gearbox", three).unwrap();
     let names: Vec<String> = r.calls.iter().filter(|c| c.0 == "solid.cylinder").filter_map(|c| c.1["body_name"].as_str().map(String::from)).collect();
     // Zaehnezahl und Modul stehen im Namen; i waechst mit jedem Rad, Antriebsritzel ohne i
     for z in [20, 40, 18, 54, 15, 60] {
@@ -343,7 +345,8 @@ fn gearbox_labels_stages_and_respects_call_budget() {
     assert!(names.iter().any(|n| n.contains("Rad Z60 m2 W4 (i=24, Abtrieb)")), "{names:?}");
     assert!(r.calls.len() <= 64 + 25);
     assert!((out["uebersetzung_gesamt"].as_f64().unwrap() - 24.0).abs() < 1e-9);
-    let six = zf(&[(20, 40), (20, 40), (20, 40), (20, 40)]);
+    let mut six = zf(&[(20, 40), (20, 40), (20, 40), (20, 40)]);
+    six["joints"] = json!(false);
     let (r2, out2) = run("gearbox", six.clone()).unwrap();
     assert!(r2.calls.len() <= 64 + 25);
     assert!(out2["weiter"].is_string());
@@ -434,4 +437,25 @@ fn crown_is_conjugate_to_pinion_and_limited_by_undercut_and_pointing() {
         let w = o["kronenrad"]["b"].as_f64().unwrap();
         assert!(w > 0.5 * m && w < 6.0 * m, "m={m} b={w}");
     }
+}
+
+#[test]
+fn joints_are_built_per_part_with_gear_links_and_study() {
+    // Stirnradpaar: zwei Komponenten, zwei Drehgelenke gegen das Gestell, eine Zahnradkopplung, eine Bewegungsstudie
+    let (r, _) = run("pair-spur", json!({ "m": 2, "z": 15, "z2": 45 })).unwrap();
+    let ids: Vec<&str> = r.calls.iter().map(|c| c.0.as_str()).collect();
+    assert_eq!(ids.iter().filter(|i| **i == "component.create").count(), 2);
+    assert_eq!(ids.iter().filter(|i| **i == "joint.as_built").count(), 2);
+    let g = r.calls.iter().find(|c| c.0 == "joint.gear").unwrap();
+    assert_eq!((g.1["ra"].as_i64(), g.1["rb"].as_i64()), (Some(15), Some(45)));
+    assert!(ids.contains(&"motion.study"));
+    // ohne Gelenke wie bisher
+    let (r0, _) = run("pair-spur", json!({ "m": 2, "z": 15, "z2": 45, "joints": false })).unwrap();
+    assert!(!r0.calls.iter().any(|c| c.0.starts_with("component.") || c.0.starts_with("joint.")));
+    // Getriebe: eine Komponente je Welle (Rad und Ritzel einer Welle zusammen), Kopplung je Stufe
+    let (rg, _) = run("gearbox", json!({ "z": 15, "z2": 45, "z3": 10, "z4": 50, "m": 2 })).unwrap();
+    let comps: Vec<String> = rg.calls.iter().filter(|c| c.0 == "component.create").map(|c| c.1["name"].as_str().unwrap().to_string()).collect();
+    assert_eq!(comps.len(), 3, "{comps:?}");
+    assert_eq!(rg.calls.iter().filter(|c| c.0 == "joint.gear").count(), 2);
+    assert_eq!(rg.calls.iter().filter(|c| c.0 == "joint.as_built").count(), 3);
 }

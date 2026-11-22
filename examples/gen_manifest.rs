@@ -17,14 +17,15 @@ fn main() {
     let manifest = json!({
         "id": "zahnrad",
         "name": "Zahnrad-Generator",
-        "version": "1.3.0",
+        "version": "1.4.0",
         "description": "Evolventen-Zahnräder: Einzelräder und Getriebepaare: Stirnrad (gerade, schräg, Pfeil), Hohlrad, Zahnstange, Schnecke, Schneckenrad, Kegelrad (90°), Kronenrad.",
         "capabilities": ["commands@0.1"],
         "runtime": {
             "module": "zahnrad.wasm",
             "commands": [
                 "sketch.create", "sketch.line", "sketch.spline.fit_point", "sketch.arc.three_point", "sketch.finish",
-                "solid.extrude", "solid.sweep", "solid.cylinder", "solid.coil", "solid.move", "solid.pattern.circular", "solid.loft", "solid.cone"
+                "solid.extrude", "solid.sweep", "solid.cylinder", "solid.coil", "solid.move", "solid.pattern.circular", "solid.loft", "solid.cone",
+                "component.create", "component.activate", "joint.as_built", "joint.gear", "joint.rack_pinion", "joint.motion_link", "motion.study"
             ],
             "entries": es,
             "limits": { "fuel": 2_000_000_000u64, "memory_mib": 64, "deadline_ms": 30000 },
