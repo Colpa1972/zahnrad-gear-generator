@@ -406,10 +406,23 @@ fn bevel_rejects_too_wide_teeth_and_big_bore() {
 }
 
 #[test]
-fn crown_teeth_stay_inside_pitch_and_pair_places_pinion_over_rim() {
-    let (r, out) = run("pair-crown", json!({ "z": 15, "z2": 45, "m": 2, "b": 12 })).unwrap();
-    assert_eq!(out["kronenrad"]["ri"], json!(39.0));
+fn crown_is_conjugate_to_pinion_and_limited_by_undercut_and_pointing() {
+    let (r, out) = run("pair-crown", json!({ "z": 15, "z2": 45, "m": 2, "b": 6 })).unwrap();
+    // innen setzt bei 1,04 · R · cos(alpha) der Unterschnitt ein
+    let ri = 1.04 * 45.0 * 20f64.to_radians().cos();
+    assert!((out["kronenrad"]["ri"].as_f64().unwrap() - ri).abs() < 1e-9);
     let mv = r.calls.iter().find(|c| c.0 == "solid.move").unwrap();
-    assert_eq!(mv.1["matrix"][0][3], json!(39.0));
-    assert!(run("crown", json!({ "z": 12, "b": 40 })).is_err());
+    assert!((mv.1["matrix"][0][3].as_f64().unwrap() - ri).abs() < 1e-9);
+    let loft = r.calls.iter().find(|c| c.0 == "solid.loft").unwrap();
+    assert_eq!(loft.1["sections"].as_array().unwrap().len(), 6);
+    // Flankenwinkel waechst nach aussen: Zahn am Fuss innen schmaler als aussen, am Kopf innen breiter
+    let lines: Vec<_> = r.calls.iter().filter(|c| c.0 == "sketch.line" && c.1["points"].as_array().unwrap().len() > 10).collect();
+    let (a, b) = (lines[0].1["points"].as_array().unwrap(), lines[5].1["points"].as_array().unwrap());
+    assert!(a[1][0].as_f64().unwrap() < b[1][0].as_f64().unwrap());
+    let top = |p: &Vec<serde_json::Value>| p[11][0].as_f64().unwrap();
+    assert!(top(a) > top(b) && top(b) > 0.0);
+    // zu breit: aussen laufen die Zaehne spitz zu
+    assert!(run("pair-crown", json!({ "z": 15, "z2": 45, "m": 2, "b": 40 })).is_err());
+    assert!(run("crown", json!({ "z": 45, "z2": 15, "b": 40 })).is_err());
+    assert!(run("crown", json!({ "z": 45, "z2": 15 })).is_ok());
 }
